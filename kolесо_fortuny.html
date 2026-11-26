@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#17132e">
+<title>Колесо фортуны — игра на жизни</title>
+<style>
+:root{color-scheme:dark;--bg:#100e20;--panel:#1d1934;--muted:#aaa3c5;--purple:#9270ff;--pink:#ff557e;--gold:#ffcf55}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:28px 16px 50px;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:#fff;background:radial-gradient(ellipse at 50% -10%,#443274 0,#201a3d 38%,var(--bg) 78%)}
+main{max-width:1100px;margin:auto}
+header{text-align:center;margin-bottom:26px}
+h1{font-size:clamp(28px,5vw,44px);margin:0 0 8px;letter-spacing:.02em}
+header p{margin:0;color:#c5bddf}
+.layout{display:grid;grid-template-columns:minmax(280px,1.1fr) minmax(290px,.9fr);gap:22px;align-items:start}
+.panel{background:#ffffff0d;border:1px solid #ffffff1b;border-radius:20px;padding:20px;box-shadow:0 14px 40px #0002}
+.wheel-panel{text-align:center}
+.wheel-wrap{width:min(100%,470px);margin:8px auto 0;position:relative}
+canvas{display:block;width:100%;height:auto;filter:drop-shadow(0 12px 22px #0005)}
+.pointer{position:absolute;z-index:2;left:50%;top:-8px;transform:translateX(-50%);font-size:38px;line-height:1;color:var(--gold);text-shadow:0 3px 7px #0009}
+button,select,input{font:inherit}
+button{border:0;border-radius:11px;padding:12px 16px;font-weight:750;cursor:pointer;transition:transform .15s,opacity .15s}
+button:hover:not(:disabled){transform:translateY(-1px)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.spin{margin-top:18px;padding:15px 34px;font-size:18px;color:#261b36;background:linear-gradient(135deg,#ffe17a,#ff984e);box-shadow:0 7px 22px #ffad4b35}
+.secondary{background:#ffffff16;color:#fff}
+.danger{background:#ff557e20;color:#ff9ab1}
+.add{width:100%;background:linear-gradient(135deg,#9b7aff,#7652ed);color:white}
+input,select{width:100%;padding:12px 13px;border-radius:10px;border:1px solid #ffffff25;background:#151229;color:#fff;outline:none}
+input:focus,select:focus{border-color:var(--purple)}
+label{display:block;font-size:13px;color:#c9c2dc;margin:13px 0 6px}
+h2{font-size:20px;margin:0 0 14px}
+h3{font-size:16px;margin:20px 0 8px}
+.field-row{display:grid;grid-template-columns:1fr 130px;gap:10px}
+.players{margin-top:16px}
+.player{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 2px;border-bottom:1px solid #ffffff13}
+.player:last-child{border-bottom:0}
+.player-name{min-width:0;overflow-wrap:anywhere;font-weight:650}
+.player-meta{display:flex;align-items:center;gap:9px;white-space:nowrap}
+.hearts{letter-spacing:1px;color:#ff6489;font-size:14px}
+.eliminated{opacity:.48}
+.eliminated .player-name{text-decoration:line-through}
+.small{font-size:12px;color:var(--muted);line-height:1.5}
+.result{max-width:650px;margin:22px auto 0;padding:16px 18px;border:1px solid #9b7aff55;border-radius:15px;background:#8b68ff18;white-space:pre-line;font-weight:650;line-height:1.5}
+.stats{display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-top:12px;color:#c8c0dd;font-size:13px}
+.history-panel{margin-top:22px}
+.history-list{display:grid;gap:9px;max-height:390px;overflow:auto}
+.history-item{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;background:#ffffff09;border:1px solid #ffffff12;border-left:3px solid var(--purple);padding:11px 12px;border-radius:10px}
+.history-item.out{border-left-color:var(--pink)}
+.history-main{min-width:0}
+.history-main strong{display:block;margin-bottom:3px}
+.history-main span{font-size:13px;color:#c9c2dc}
+.history-time{font-size:11px;color:var(--muted);white-space:nowrap}
+.history-empty{color:var(--muted);font-size:14px;padding:8px 0}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.actions button{flex:1}
+.footer-note{text-align:center;color:#938bab;font-size:12px;margin-top:18px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.panel{padding:17px}.wheel-wrap{width:min(100%,390px)}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>🎡 Колесо фортуны</h1>
+  <p>Крути колесо, теряй жизни и постарайся остаться последним!</p>
+</header>
+
+<div class="layout">
+  <section class="panel wheel-panel">
+    <div class="wheel-wrap">
+      <div class="pointer">▼</div>
+      <canvas id="wheel" width="700" height="700" aria-label="Колесо участников"></canvas>
+    </div>
+    <button class="spin" id="spinButton" type="button">🎯 Крутить колесо</button>
+    <div class="result" id="result" aria-live="polite">Добавь минимум двух игроков, чтобы начать!</div>
+    <div class="stats">
+      <span id="activeCount">Активных: 0</span>
+      <span id="outCount">Выбыли: 0</span>
+      <span id="roundCount">Раундов: 0</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>👥 Участники</h2>
+    <div class="field-row">
+      <div>
+        <label for="playerName">Имя игрока</label>
+        <input id="playerName" maxlength="22" placeholder="Например, Алексей">
+      </div>
+      <div>
+        <label for="initialLives">Жизни</label>
+        <input id="initialLives" type="number" min="1" max="20" value="3">
+      </div>
+    </div>
+    <button class="add" id="addButton" type="button" style="margin-top:12px">＋ Добавить игрока</button>
+
+    <label for="spinTime">⏱️ Длительность прокрутки</label>
+    <select id="spinTime">
+      <option value="3">3 секунды</option>
+      <option value="5" selected>5 секунд</option>
+      <option value="10">10 секунд</option>
+      <option value="15">15 секунд</option>
+      <option value="20">20 секунд</option>
+    </select>
+    <p class="small">Время можно менять перед каждым вращением. Чем дольше время, тем дольше колесо будет замедляться.</p>
+
+    <h3>Список игроков</h3>
+    <div class="players" id="playersList"><div class="small">Пока никого нет.</div></div>
+    <div class="actions">
+      <button class="secondary" id="newGameButton" type="button">🔄 Новая игра</button>
+      <button class="danger" id="clearAllButton" type="button">Удалить всех</button>
+    </div>
+  </section>
+</div>
+
+<section class="panel history-panel">
+  <h2>📜 История жизней</h2>
+  <div class="history-list" id="historyList"><div class="history-empty">Здесь появятся результаты прокруток.</div></div>
+  <div class="actions">
+    <button class="secondary" id="clearHistoryButton" type="button">Очистить историю</button>
+  </div>
+</section>
+<p class="footer-note">Игра автоматически сохраняется в этом браузере на этом устройстве.</p>
+</main>
+
+<script>
+(() => {
+  const STORAGE_KEY = "fortune-wheel-lives-game-v1";
+  const colors = ["#ef5575","#7957d5","#13a995","#ed9848","#477be7","#c653b7","#94b83f","#d76b45","#368eb7","#b67bdb"];
+  const $ = id => document.getElementById(id);
+  const canvas = $("wheel");
+  const ctx = canvas.getContext("2d");
+
+  let players = [];
+  let history = [];
+  let rotation = 0;
+  let spinning = false;
+  let gameOver = false;
+  let gameStarted = false;
+  let roundNumber = 0;
+
+  function activePlayers() { return players.filter(p => p.active); }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        players, history, rotation, gameOver, gameStarted, roundNumber,
+        spinTime: $("spinTime").value
+      }));
+    } catch (e) {
+      // Игра продолжит работать и без локального сохранения.
+    }
+  }
+
+  function load() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (!data) return;
+      if (Array.isArray(data.players)) players = data.players;
+      if (Array.isArray(data.history)) history = data.history;
+      rotation = Number(data.rotation) || 0;
+      gameOver = Boolean(data.gameOver);
+      gameStarted = Boolean(data.gameStarted);
+      roundNumber = Number(data.roundNumber) || history.length;
+      if (["3","5","10","15","20"].includes(String(data.spinTime))) {
+        $("spinTime").value = String(data.spinTime);
+      }
+    } catch (e) {
+      players = []; history = []; rotation = 0;
+      gameOver = false; gameStarted = false; roundNumber = 0;
+    }
+  }
+
+  function drawWheel() {
+    const active = activePlayers();
+    ctx.clearRect(0, 0, 700, 700);
+    if (!active.length) {
+      ctx.beginPath(); ctx.arc(350,350,325,0,Math.PI*2);
+      ctx.fillStyle = "#292344"; ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+      ctx.font = "bold 28px system-ui";
+      ctx.fillText(players.length ? "ВСЕ ВЫБЫЛИ" : "ДОБАВЬ ИГРОКОВ",350,360);
+      return;
+    }
+    const step = Math.PI * 2 / active.length;
+    active.forEach((p, i) => {
+      const start = rotation + i * step - Math.PI/2;
+      const end = start + step;
+      ctx.beginPath();
+      ctx.moveTo(350,350);
+      ctx.arc(350,350,325,start,end);
+      ctx.closePath();
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.save();
+      ctx.translate(350,350);
+      ctx.rotate(start + step/2);
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "#000";
+      ctx.shadowBlur = 5;
+      const maxChars = active.length > 9 ? 10 : 15;
+      const label = p.name.length > maxChars ? p.name.slice(0,maxChars-1)+"…" : p.name;
+      ctx.font = `700 ${active.length > 10 ? 17 : 21}px system-ui`;
+      ctx.fillText(label, 292, 0);
+      ctx.restore();
+    });
+    ctx.beginPath(); ctx.arc(350,350,54,0,Math.PI*2);
+    ctx.fillStyle = "#19152d"; ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 5; ctx.stroke();
+    ctx.fillStyle = "#ffcf55"; ctx.font = "bold 30px Arial";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("★",350,351);
+  }
+
+  function renderPlayers() {
+    const list = $("playersList");
+    list.replaceChildren();
+    if (!players.length) {
+      const empty = document.createElement("div");
+      empty.className = "small"; empty.textContent = "Пока никого нет.";
+      list.appendChild(empty);
+    }
+    players.forEach(p => {
+      const row = document.createElement("div");
+      row.className = "player" + (p.active ? "" : " eliminated");
+      const name = document.createElement("span");
+      name.className = "player-name";
+      name.textContent = (p.active ? "🟢 " : "☠️ ") + p.name;
+      const meta = document.createElement("span");
+      meta.className = "player-meta";
+      const hearts = document.createElement("span");
+      hearts.className = "hearts";
+      hearts.textContent = p.active
+        ? "❤️".repeat(p.lives) + "🖤".repeat(Math.max(0,p.maxLives-p.lives))
+        : "ВЫБЫЛ";
+      meta.appendChild(hearts);
+      row.append(name,meta);
+      list.appendChild(row);
+    });
+  }
+
+  function renderHistory() {
+    const list = $("historyList");
+    list.replaceChildren();
+    if (!history.length) {
+      const empty = document.createElement("div");
+      empty.className = "history-empty";
+      empty.textContent = "Здесь появятся результаты прокруток.";
+      list.appendChild(empty);
+      return;
+    }
+    history.forEach(item => {
+      const row = document.createElement("div");
+      row.className = "history-item" + (item.eliminated ? " out" : "");
+      const main = document.createElement("div");
+      main.className = "history-main";
+      const title = document.createElement("strong");
+      title.textContent = item.eliminated ? `☠️ ${item.name} выбыл(а)` : `🎯 Выпал игрок: ${item.name}`;
+      const detail = document.createElement("span");
+      detail.textContent = `Жизни: ${item.before} → ${item.after}`;
+      main.append(title,detail);
+      const time = document.createElement("time");
+      time.className = "history-time";
+      time.textContent = `Раунд ${item.round} · ${item.time}`;
+      row.append(main,time);
+      list.appendChild(row);
+    });
+  }
+
+  function render() {
+    drawWheel();
+    renderPlayers();
+    renderHistory();
+    const active = activePlayers().length;
+    $("activeCount").textContent = `Активных: ${active}`;
+    $("outCount").textContent = `Выбыли: ${players.length-active}`;
+    $("roundCount").textContent = `Раундов: ${roundNumber}`;
+
+    if (players.length > 1 && active === 1) {
+      gameOver = true;
+      const champion = activePlayers()[0];
+      $("result").textContent = `🏆 ПОБЕДИТЕЛЬ: ${champion.name}!`;
+    } else if (players.length > 0 && active === 0) {
+      gameOver = true;
+      $("result").textContent = "☠️ Все игроки выбыли!";
+    }
+    $("spinButton").disabled = spinning || gameOver || active < 2;
+    $("addButton").disabled = spinning || gameOver;
+    save();
+  }
+
+  function addPlayer() {
+    const name = $("playerName").value.trim();
+    const lives = Number($("initialLives").value);
+    if (!name) { alert("Введи имя игрока."); $("playerName").focus(); return; }
+    if (!Number.isInteger(lives) || lives < 1 || lives > 20) {
+      alert("Количество жизней должно быть от 1 до 20."); return;
+    }
+    if (players.some(p => p.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      alert("Игрок с таким именем уже есть."); return;
+    }
+    if (gameOver) { alert("Игра завершена. Нажми «Новая игра», чтобы сыграть ещё раз."); return; }
+    players.push({
+      name, lives, maxLives:lives,
+      active:true, color:colors[players.length % colors.length]
+    });
+    $("playerName").value = "";
+    $("playerName").focus();
+    if (activePlayers().length >= 2 && !gameStarted) {
+      $("result").textContent = "Игроки готовы! Нажми «Крутить колесо».";
+    }
+    render();
+  }
+
+  function addHistory(player,before,after,eliminated) {
+    roundNumber++;
+    history.unshift({
+      round:roundNumber, name:player, before, after, eliminated,
+      time:new Date().toLocaleString("ru-RU")
+    });
+  }
+
+  function spinWheel() {
+    const active = activePlayers();
+    if (spinning || gameOver || active.length < 2) return;
+    spinning = true;
+    gameStarted = true;
+    $("spinButton").disabled = true;
+    $("addButton").disabled = true;
+
+    const step = Math.PI * 2 / active.length;
+    const selected = Math.floor(Math.random() * active.length);
+    const target = ((-(selected + 0.5) * step) % (Math.PI*2) + Math.PI*2) % (Math.PI*2);
+    const current = ((rotation % (Math.PI*2)) + Math.PI*2) % (Math.PI*2);
+    const distance = (target - current + Math.PI*2) % (Math.PI*2);
+    const start = rotation;
+    const end = start + Math.PI*2*7 + distance;
+    const duration = Number($("spinTime").value) * 1000;
+    const startedAt = performance.now();
+
+    function animate(now) {
+      const progress = Math.min((now-startedAt)/duration,1);
+      const eased = 1 - Math.pow(1-progress,5);
+      rotation = start + (end-start)*eased;
+      drawWheel();
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+        return;
+      }
+
+      rotation = end;
+      const chosen = active[selected];
+      const before = chosen.lives;
+      chosen.lives = Math.max(0,chosen.lives-1);
+      const eliminated = chosen.lives === 0;
+      if (eliminated) chosen.active = false;
+      addHistory(chosen.name,before,chosen.lives,eliminated);
+
+      $("result").textContent = eliminated
+        ? `🎯 Выпал игрок: ${chosen.name}\n💔 Жизни закончились — игрок выбывает!`
+        : `🎯 Выпал игрок: ${chosen.name}\n❤️ Осталось жизней: ${chosen.lives} из ${chosen.maxLives}`;
+
+      spinning = false;
+      render();
+    }
+    requestAnimationFrame(animate);
+  }
+
+  function newGame() {
+    if (!players.length) { alert("Сначала добавь игроков."); return; }
+    if (!confirm("Начать новую игру? Жизни восстановятся, история раундов очистится.")) return;
+    players = players.map(p => ({...p,lives:p.maxLives,active:true}));
+    history = [];
+    roundNumber = 0;
+    rotation = 0;
+    gameOver = false;
+    gameStarted = false;
+    spinning = false;
+    $("result").textContent = "Новая игра началась! Удачи всем участникам!";
+    render();
+  }
+
+  function clearAll() {
+    if (!players.length) return;
+    if (!confirm("Удалить всех игроков и всю историю?")) return;
+    players = []; history = []; roundNumber = 0; rotation = 0;
+    gameOver = false; gameStarted = false; spinning = false;
+    $("result").textContent = "Добавь минимум двух игроков, чтобы начать!";
+    render();
+  }
+
+  function clearHistory() {
+    if (!history.length) return;
+    if (!confirm("Очистить историю выпадений?")) return;
+    history = [];
+    roundNumber = 0;
+    render();
+  }
+
+  $("addButton").addEventListener("click",addPlayer);
+  $("playerName").addEventListener("keydown",e => { if (e.key === "Enter") addPlayer(); });
+  $("spinButton").addEventListener("click",spinWheel);
+  $("newGameButton").addEventListener("click",newGame);
+  $("clearAllButton").addEventListener("click",clearAll);
+  $("clearHistoryButton").addEventListener("click",clearHistory);
+  $("spinTime").addEventListener("change",save);
+
+  load();
+  $("result").textContent = players.length
+    ? (gameOver ? "Игра завершена. Можно начать новую игру." : "Игра восстановлена. Продолжай!")
+    : "Добавь минимум двух игроков, чтобы начать!";
+  render();
+})();
+</script>
+</body>
+</html>
